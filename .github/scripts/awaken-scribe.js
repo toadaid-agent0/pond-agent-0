@@ -413,6 +413,160 @@ function isAdminCommand(msg) {
   return m === '/rebuild-index' || m === '/admin rebuild-index';
 }
 
+function isAgentBridgeCommand(msg) {
+  const m = String(msg || '').trim();
+  return m.startsWith('/agent ') || m === '/agent';
+}
+
+function loadAllowedAgents() {
+  try {
+    const base = process.env.GITHUB_WORKSPACE || process.cwd();
+    const p = path.join(base, 'data', 'allowed_agents.json');
+    if (!fs.existsSync(p)) return [];
+    const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) {
+    console.log('⚠️ Could not load data/allowed_agents.json:', e.message);
+    return [];
+  }
+}
+
+function parseAgentBridgeCommand(msg) {
+  // Format:
+  // /agent owner/repo
+  // question: ...
+  // max_turns: 1
+  const text = String(msg || '').trim();
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const first = lines[0] || '';
+  const m = first.match(/^\/agent\s+([^\s]+)\s*$/i);
+  const targetRepo = m ? m[1].trim() : '';
+
+  let question = '';
+  let maxTurns = 1;
+
+  for (const line of lines.slice(1)) {
+    const mq = line.match(/^question\s*:\s*(.+)$/i);
+    if (mq) { question = mq[1].trim(); continue; }
+
+    const mt = line.match(/^max_turns\s*:\s*(\d+)$/i);
+    if (mt) { maxTurns = parseInt(mt[1], 10); continue; }
+  }
+
+  // If question wasn't provided, use the remainder of the message after the first line.
+  if (!question && lines.length > 1) {
+    question = lines.slice(1).join('\n');
+  }
+
+  maxTurns = Number.isFinite(maxTurns) ? Math.max(1, Math.min(3, maxTurns)) : 1;
+
+  return { targetRepo, question, maxTurns };
+}
+
+async function maybeHandleAgentBridge({ octokit, owner, repo, issueNumber, userName, association, userMessage }) {
+  if (!isAgentBridgeCommand(userMessage)) return false;
+
+  // Maintainers-only for now.
+  if (!isPrivilegedAssociation(association)) {
+    if (issueNumber) {
+      await octokit.issues.createComment({
+        owner,
+        repo,
+        issue_number: parseInt(issueNumber),
+        body: `Traveler ${userName}, /agent is reserved for maintainers.`
+      });
+    }
+    return true;
+  }
+
+  const { targetRepo, question, maxTurns } = parseAgentBridgeCommand(userMessage);
+  if (!targetRepo || !targetRepo.includes('/')) {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: parseInt(issueNumber),
+      body: `Traveler ${userName}, usage:\n\n\`\`\`\n/agent owner/repo\nquestion: <your question>\nmax_turns: 1\n\`\`\``
+    });
+    return true;
+  }
+
+  const allowed = loadAllowedAgents();
+  const ok = allowed.some((a) => String(a.repo || '').toLowerCase() === targetRepo.toLowerCase());
+  if (!ok) {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: parseInt(issueNumber),
+      body: `Traveler ${userName}, that target is not allowlisted. Add it to \`data/allowed_agents.json\` first.`
+    });
+    return true;
+  }
+
+  if (!String(question || '').trim()) {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: parseInt(issueNumber),
+      body: `Traveler ${userName}, include a question. Example:\n\n\`\`\`\n/agent ${targetRepo}\nquestion: What is Taboshi?\nmax_turns: 1\n\`\`\``
+    });
+    return true;
+  }
+
+  if (!process.env.AGENT_BRIDGE_TOKEN) {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: parseInt(issueNumber),
+      body: `Traveler ${userName}, AGENT_BRIDGE_TOKEN is not configured in Actions secrets. I cannot open cross-repo issues yet.`
+    });
+    return true;
+  }
+
+  const bridge = new Octokit({ auth: process.env.AGENT_BRIDGE_TOKEN });
+  const [tOwner, tRepo] = targetRepo.split('/');
+
+  const conversationId = `agentbridge_${repo}_${issueNumber}_${Date.now()}`;
+  const title = `AgentCall: ${repo}#${issueNumber} → ${targetRepo}`;
+  const body = [
+    `From Agent 0 (toadaid-agent0/pond-agent-0) — maintainer request`,
+    ``,
+    `conversation_id: ${conversationId}`,
+    `from_repo: ${owner}/${repo}`,
+    `from_issue: ${issueNumber}`,
+    `turn: 1`,
+    `max_turns: ${maxTurns}`,
+    ``,
+    `question: ${question.trim()}`,
+    ``,
+    `Please answer with Signal / Reflection / Sources.`
+  ].join('\n');
+
+  try {
+    const created = await bridge.issues.create({
+      owner: tOwner,
+      repo: tRepo,
+      title,
+      body
+    });
+
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: parseInt(issueNumber),
+      body: `Traveler ${userName}, I opened an agent call: ${created.data.html_url}`
+    });
+  } catch (e) {
+    await octokit.issues.createComment({
+      owner,
+      repo,
+      issue_number: parseInt(issueNumber),
+      body: `Traveler ${userName}, I could not open the remote issue in ${targetRepo}: \`${e.message}\``
+    });
+  }
+
+  return true;
+}
+
 async function maybeHandleAdminCommand({ octokit, owner, repo, issueNumber, userName, association, userMessage }) {
   if (!isAdminCommand(userMessage)) return false;
 
@@ -528,6 +682,11 @@ async function awakenScribe() {
 
     // Admin commands (maintainers only)
     if (await maybeHandleAdminCommand({ octokit, owner, repo, issueNumber, userName, association, userMessage })) {
+      return;
+    }
+
+    // Agent bridge (maintainers only)
+    if (await maybeHandleAgentBridge({ octokit, owner, repo, issueNumber, userName, association, userMessage })) {
       return;
     }
 
