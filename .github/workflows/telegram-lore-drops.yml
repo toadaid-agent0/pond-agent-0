@@ -1,0 +1,74 @@
+name: Telegram Lore Drops
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Drop slot (0..3)'
+        required: false
+        default: '0'
+  schedule:
+    # 4/day schedule (ET-friendly). Note: GitHub cron is UTC.
+    # 02:17 ET  -> 07:17 UTC
+    # 08:17 ET  -> 13:17 UTC
+    # 14:17 ET  -> 19:17 UTC
+    # 20:17 ET  -> 01:17 UTC (next day)
+    - cron: "17 1 * * *"
+    - cron: "17 7 * * *"
+    - cron: "17 13 * * *"
+    - cron: "17 19 * * *"
+
+jobs:
+  drop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install
+        run: npm ci
+
+      - name: Determine slot
+        id: slot
+        run: |
+          if [ -n "${{ github.event.inputs.slot }}" ]; then
+            echo "slot=${{ github.event.inputs.slot }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Map UTC hour to slot
+          # 01 -> slot 3
+          # 07 -> slot 0
+          # 13 -> slot 1
+          # 19 -> slot 2
+          H=$(date -u +%H)
+          case "$H" in
+            01) S=3 ;;
+            07) S=0 ;;
+            13) S=1 ;;
+            19) S=2 ;;
+            *)  S=0 ;;
+          esac
+          echo "slot=$S" >> $GITHUB_OUTPUT
+
+      - name: Send lore drop to Telegram
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DROP_SLOT: ${{ steps.slot.outputs.slot }}
+        run: node scripts/telegram_lore_drop.js
