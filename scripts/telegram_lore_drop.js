@@ -134,8 +134,6 @@ async function sendTelegram(token, chatId, text) {
 async function main() {
   const token = process.env.TELEGRAM_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token) fail('Missing TELEGRAM_TOKEN');
-  if (!chatId) fail('Missing TELEGRAM_CHAT_ID');
 
   const slot = Number.isFinite(parseInt(process.env.DROP_SLOT, 10)) ? parseInt(process.env.DROP_SLOT, 10) : 0;
 
@@ -166,9 +164,22 @@ async function main() {
 
   const { item } = pickItem(items, slot);
   const text = formatMessage({ item, slot });
-  await sendTelegram(token, chatId, text);
 
-  console.log(`Sent Telegram lore drop (slot=${slot}, source=${sourceMode}) using ${item.id || item.path || 'unknown'}`);
+  // Optional: persist the rendered drop for other steps (e.g., GitHub issue comment).
+  const outPath = process.env.DROP_OUTPUT_PATH;
+  if (outPath) {
+    fs.writeFileSync(outPath, text, 'utf8');
+  }
+
+  const skipTelegram = process.env.SKIP_TELEGRAM === 'true';
+  if (!skipTelegram) {
+    if (!token) fail('Missing TELEGRAM_TOKEN');
+    if (!chatId) fail('Missing TELEGRAM_CHAT_ID');
+    await sendTelegram(token, chatId, text);
+  }
+
+  console.log(`Rendered lore drop (slot=${slot}, source=${sourceMode}) using ${item.id || item.path || 'unknown'}`);
+  if (!skipTelegram) console.log('Sent Telegram lore drop');
 }
 
 main().catch((e) => {
