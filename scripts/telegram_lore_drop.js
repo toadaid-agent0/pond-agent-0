@@ -47,12 +47,15 @@ function pickItem(items, slot) {
 }
 
 function formatMessage({ item, slot }) {
-  const title = (item.title || 'Untitled').trim();
+  const title = (item.title || item.id || 'Untitled').trim();
   const date = (item.date || '').trim();
-  const summary = (item.summary || item.text_preview || '').trim();
 
-  const short = summary.length > 700 ? summary.slice(0, 700).trimEnd() + '…' : summary;
-  const source = item.id || item.path || 'unknown';
+  // Prefer preview text; summary can be too short/noisy.
+  const body = (item.text_preview || item.summary || '').trim();
+  const short = body.length > 700 ? body.slice(0, 700).trimEnd() + '…' : body;
+
+  // Use a stable source id only (avoid posting file paths that Telegram turns into broken links).
+  const source = item.id || 'unknown';
 
   const slotNames = ['Dawn Drop', 'Midday Drop', 'Evening Drop', 'Night Drop'];
   const slotLabel = slotNames[slot] || `Drop ${slot}`;
@@ -63,9 +66,9 @@ function formatMessage({ item, slot }) {
     '',
     `<b>${escapeHtml(title)}</b>${date ? ` <i>(${escapeHtml(date)})</i>` : ''}`,
     '',
-    `${escapeHtml(short)}`,
+    short ? `${escapeHtml(short)}` : `<i>(no preview available)</i>`,
     '',
-    `<code>${escapeHtml(source)}</code>`
+    `<i>Source</i>: <code>${escapeHtml(source)}</code>`
   ];
 
   return lines.join('\n');
