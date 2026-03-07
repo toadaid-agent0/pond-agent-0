@@ -34,7 +34,7 @@ jobs:
       - name: Checkout lore-scrolls (private canon)
         uses: actions/checkout@v4
         with:
-          repository: MirrorAgent1/lore-scrolls
+          repository: toadaid-agent0/lore-scrolls
           path: lore-scrolls
           token: ${{ secrets.LORE_REPO_TOKEN }}
 
