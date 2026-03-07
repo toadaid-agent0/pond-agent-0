@@ -50,29 +50,43 @@ function formatMessage({ item, slot }) {
   const title = (item.title || item.id || 'Untitled').trim();
   const date = (item.date || '').trim();
 
-  // Prefer a readable excerpt.
-  // For toadgod-lore.json entries, "comment" is the enriched lore.
-  const body = (item.comment || item.text_preview || item.summary || item.original || '').trim();
+  const isToadgodJson = typeof item.original === 'string' || typeof item.comment === 'string';
 
-  // Keep it short for chat.
-  const short = body.length > 900 ? body.slice(0, 900).trimEnd() + '…' : body;
+  // For Toadgod lore JSON, include BOTH original tweet + definition.
+  const original = isToadgodJson ? String(item.original || '').trim() : '';
+  const definition = isToadgodJson ? String(item.comment || '').trim() : '';
 
-  // Stable ID only.
-  const source = item.id || 'unknown';
+  // For scroll index mode, fall back to preview-ish fields.
+  const fallbackBody = String(item.text_preview || item.summary || '').trim();
 
   const slotNames = ['Dawn Drop', 'Midday Drop', 'Evening Drop', 'Night Drop'];
   const slotLabel = slotNames[slot] || `Drop ${slot}`;
 
-  // Use HTML parse mode to avoid MarkdownV2 entity parsing errors.
+  const source = item.id || 'unknown';
+
   const lines = [
     `<b>🪷 ${escapeHtml(slotLabel)}</b>`,
     '',
     `<b>${escapeHtml(title)}</b>${date ? ` <i>(${escapeHtml(date)})</i>` : ''}`,
-    '',
-    short ? `${escapeHtml(stripMarkdown(short))}` : `<i>(no excerpt available)</i>`,
-    '',
-    `<i>Source</i>: <code>${escapeHtml(source)}</code>`
+    ''
   ];
+
+  if (isToadgodJson) {
+    const o = trimTo(stripMarkdown(original), 420);
+    const d = trimTo(stripMarkdown(definition), 900);
+
+    lines.push(`<b>Original (Toadgod)</b>`);
+    lines.push(o ? escapeHtml(o) : '<i>(missing)</i>');
+    lines.push('');
+    lines.push(`<b>Definition</b>`);
+    lines.push(d ? escapeHtml(d) : '<i>(missing)</i>');
+  } else {
+    const b = trimTo(stripMarkdown(fallbackBody), 900);
+    lines.push(b ? escapeHtml(b) : '<i>(no excerpt available)</i>');
+  }
+
+  lines.push('');
+  lines.push(`<i>Source</i>: <code>${escapeHtml(source)}</code>`);
 
   return lines.join('\n');
 }
@@ -93,6 +107,12 @@ function stripMarkdown(s) {
     .replace(/`([^`]*)`/g, '$1')
     .replace(/>\s?/g, '')
     .trim();
+}
+
+function trimTo(s, maxLen) {
+  const t = String(s || '').trim();
+  if (!maxLen || t.length <= maxLen) return t;
+  return t.slice(0, maxLen).trimEnd() + '…';
 }
 
 async function sendTelegram(token, chatId, text) {
