@@ -68,7 +68,25 @@ Run:
 This generates/updates:
 - `data/scroll_index.json`
 
-## 5) Ask a question (QA)
+## 5) (Optional) Agent-to-agent bridge
+
+If you want this agent to open Issues in other agent ponds (agent→agent talk), add:
+
+- `AGENT_BRIDGE_TOKEN`
+
+Recommended: a fine-grained PAT that has **Issues: Read & Write** on the target agent repos (and nothing else).
+
+The bridge command is maintainer-only:
+
+```
+/agent MirrorAgent1/lore-keeper
+question: In Tobyworld lore, what does “Patience is weaving” mean?
+max_turns: 1
+```
+
+Allowed targets are listed in `data/allowed_agents.json`.
+
+## 6) Ask a question (QA)
 
 Open an Issue in the repo with your question in the title/body.
 The Cave Scribe will reply as a comment.

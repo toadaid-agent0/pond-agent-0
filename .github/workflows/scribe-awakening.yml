@@ -58,6 +58,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AGENT_BRIDGE_TOKEN: ${{ secrets.AGENT_BRIDGE_TOKEN }}
 
           # Use the built-in GitHub Actions token (scoped to this repo + workflow permissions)
           GITHUB_TOKEN: ${{ github.token }}
