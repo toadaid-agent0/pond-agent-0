@@ -71,4 +71,5 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DROP_SLOT: ${{ steps.slot.outputs.slot }}
+          DROP_SOURCE: toadgod_json
         run: node scripts/telegram_lore_drop.js

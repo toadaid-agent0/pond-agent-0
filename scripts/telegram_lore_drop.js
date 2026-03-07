@@ -50,26 +50,43 @@ function formatMessage({ item, slot }) {
   const title = (item.title || item.id || 'Untitled').trim();
   const date = (item.date || '').trim();
 
-  // Prefer preview text; summary can be too short/noisy.
-  const body = (item.text_preview || item.summary || '').trim();
-  const short = body.length > 700 ? body.slice(0, 700).trimEnd() + '…' : body;
+  const isToadgodJson = typeof item.original === 'string' || typeof item.comment === 'string';
 
-  // Use a stable source id only (avoid posting file paths that Telegram turns into broken links).
-  const source = item.id || 'unknown';
+  // For Toadgod lore JSON, include BOTH original tweet + definition.
+  const original = isToadgodJson ? String(item.original || '').trim() : '';
+  const definition = isToadgodJson ? String(item.comment || '').trim() : '';
+
+  // For scroll index mode, fall back to preview-ish fields.
+  const fallbackBody = String(item.text_preview || item.summary || '').trim();
 
   const slotNames = ['Dawn Drop', 'Midday Drop', 'Evening Drop', 'Night Drop'];
   const slotLabel = slotNames[slot] || `Drop ${slot}`;
 
-  // Use HTML parse mode to avoid MarkdownV2 entity parsing errors.
+  const source = item.id || 'unknown';
+
   const lines = [
     `<b>🪷 ${escapeHtml(slotLabel)}</b>`,
     '',
     `<b>${escapeHtml(title)}</b>${date ? ` <i>(${escapeHtml(date)})</i>` : ''}`,
-    '',
-    short ? `${escapeHtml(short)}` : `<i>(no preview available)</i>`,
-    '',
-    `<i>Source</i>: <code>${escapeHtml(source)}</code>`
+    ''
   ];
+
+  if (isToadgodJson) {
+    const o = trimTo(stripMarkdown(original), 420);
+    const d = trimTo(stripMarkdown(definition), 900);
+
+    lines.push(`<b>Original (Toadgod)</b>`);
+    lines.push(o ? escapeHtml(o) : '<i>(missing)</i>');
+    lines.push('');
+    lines.push(`<b>Definition</b>`);
+    lines.push(d ? escapeHtml(d) : '<i>(missing)</i>');
+  } else {
+    const b = trimTo(stripMarkdown(fallbackBody), 900);
+    lines.push(b ? escapeHtml(b) : '<i>(no excerpt available)</i>');
+  }
+
+  lines.push('');
+  lines.push(`<i>Source</i>: <code>${escapeHtml(source)}</code>`);
 
   return lines.join('\n');
 }
@@ -79,6 +96,23 @@ function escapeHtml(s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function stripMarkdown(s) {
+  // Very lightweight cleanup so tweet-style markdown doesn't overwhelm Telegram.
+  return String(s || '')
+    .replace(/^#+\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/>\s?/g, '')
+    .trim();
+}
+
+function trimTo(s, maxLen) {
+  const t = String(s || '').trim();
+  if (!maxLen || t.length <= maxLen) return t;
+  return t.slice(0, maxLen).trimEnd() + '…';
 }
 
 async function sendTelegram(token, chatId, text) {
@@ -105,23 +139,36 @@ async function main() {
 
   const slot = Number.isFinite(parseInt(process.env.DROP_SLOT, 10)) ? parseInt(process.env.DROP_SLOT, 10) : 0;
 
-  const idxPath = process.env.SCROLL_INDEX || path.join(process.cwd(), 'data', 'scroll_index.json');
-  if (!fs.existsSync(idxPath)) fail(`Missing scroll index: ${idxPath} (run index rebuild first)`);
+  const sourceMode = (process.env.DROP_SOURCE || 'toadgod_json').toLowerCase();
 
   let items;
-  try {
-    items = JSON.parse(fs.readFileSync(idxPath, 'utf8'));
-  } catch (e) {
-    fail(`Could not parse scroll index JSON: ${e.message}`);
+  if (sourceMode === 'toadgod_json') {
+    const lorePath = path.join(process.cwd(), 'lore', 'toadgod-lore.json');
+    if (!fs.existsSync(lorePath)) fail(`Missing lore/toadgod-lore.json: ${lorePath}`);
+    try {
+      items = JSON.parse(fs.readFileSync(lorePath, 'utf8'));
+    } catch (e) {
+      fail(`Could not parse lore/toadgod-lore.json: ${e.message}`);
+    }
+  } else if (sourceMode === 'scroll_index') {
+    const idxPath = process.env.SCROLL_INDEX || path.join(process.cwd(), 'data', 'scroll_index.json');
+    if (!fs.existsSync(idxPath)) fail(`Missing scroll index: ${idxPath} (run index rebuild first)`);
+    try {
+      items = JSON.parse(fs.readFileSync(idxPath, 'utf8'));
+    } catch (e) {
+      fail(`Could not parse scroll index JSON: ${e.message}`);
+    }
+  } else {
+    fail(`Unknown DROP_SOURCE: ${sourceMode}. Use 'toadgod_json' or 'scroll_index'.`);
   }
 
-  if (!Array.isArray(items) || items.length === 0) fail('scroll_index.json is empty or invalid');
+  if (!Array.isArray(items) || items.length === 0) fail('Lore source is empty or invalid');
 
   const { item } = pickItem(items, slot);
   const text = formatMessage({ item, slot });
   await sendTelegram(token, chatId, text);
 
-  console.log(`Sent Telegram lore drop (slot=${slot}) using ${item.id || item.path}`);
+  console.log(`Sent Telegram lore drop (slot=${slot}, source=${sourceMode}) using ${item.id || item.path || 'unknown'}`);
 }
 
 main().catch((e) => {
