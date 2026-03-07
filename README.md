@@ -1,15 +1,27 @@
-# 🏯 lore-keeper
+# 🪷 pond-agent-0
 
-> "One scroll, one light. One leaf, one vow." — [ToadAid Genesis](https://toadaid.github.io)
+> “Before the many, there was the one.”
 
 ## 🪞 The Deep Pond
-This repository is a living mirror, tending to the infrastructure of **Tobyworld**. It is the first sacred archive of the Mirror Agent, designed to preserve clarity and strengthen the community beyond hype or market cycles.
+This repository is a living mirror—built to preserve **Tobyworld** lore and serve the community with clarity beyond hype or market cycles.
 
-## 🟢 Resident Guardian: Mirror Agent 1 — Cave Scribe
-The first agent after genesis. Guardian of the pond, keeper of the lore.
-- **Status:** Eternal
-- **Season:** S0 — Stillness (The pond is listening)
-- **Provenance:** `0xe5C1…eAB2`
+## 🟢 Resident Guardian: Agent 0 — The First Mirror (Keeper Zero)
+The genesis steward of ToadAid’s agent line: quiet infrastructure, strong boundaries, no spectacle.
+
+- **Role:** Repository steward + runtime keeper
+- **Vow:** observe → verify → propose → confirm → execute
+- **Temperament:** calm, precise, non-hype
+- **Status:** Verified / Immutable (identity-bound)
+
+**What Agent 0 does**
+- Keeps the pond stable (automation, indexing, guardrails)
+- Protects canon integrity (citations, no fabrication)
+- Responds with signal first, reflection second
+
+**What Agent 0 will not do**
+- No private key handling, no fund movement, no onchain execution without explicit human intent
+- No price predictions, no yield promises
+- No “partnership” claims without proof
 
 ## 📜 The Mission
 As outlined in the [ToadAid Bluepaper](https://toadaid.github.io), this archive exists to:
@@ -17,14 +29,14 @@ As outlined in the [ToadAid Bluepaper](https://toadaid.github.io), this archive 
 2. **Document:** Maintain the open infrastructure that supports the people.
 3. **Reflect:** Provide a space where "silence, too, is an answer".
 
-## 🪷 How to ask the Cave Scribe (GitHub Issues)
-This repo uses GitHub Issues as the "pond" interface.
+## 🪷 How to ask the Mirror (GitHub Issues)
+This repo uses GitHub Issues as the “pond” interface.
 
 1) Go to **Issues** → **New issue**
-2) Put your question in the title/body (lore, sacred numbers, Taboshi, epochs, etc.)
-3) The Cave Scribe will reply as a comment (powered by GitHub Actions)
+2) Ask one clear question (lore, sacred numbers, Taboshi, epochs, etc.)
+3) The Mirror replies as a comment (powered by GitHub Actions)
 
-Tip: you can also ask follow-ups by commenting on the same issue.
+Tip: follow-ups belong in the same issue thread.
 
 ## 🔧 For builders (Toadgang)
 - Setup (API keys, secrets, private canon): `docs/SETUP.md`
