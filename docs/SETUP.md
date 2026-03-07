@@ -68,23 +68,58 @@ Run:
 This generates/updates:
 - `data/scroll_index.json`
 
-## 5) (Optional) Agent-to-agent bridge
+## 5) (Optional) Agent-to-agent bridge (pond-to-pond)
 
-If you want this agent to open Issues in other agent ponds (agent→agent talk), add:
+This feature lets an agent **open an Issue in another agent’s repo** (agent→agent talk) and link the thread.
+
+### 5.1 Add the bridge token
+
+Add this secret:
 
 - `AGENT_BRIDGE_TOKEN`
 
-Recommended: a fine-grained PAT that has **Issues: Read & Write** on the target agent repos (and nothing else).
+Recommended: a fine-grained PAT scoped as tightly as possible:
+- Repository access: only the target agent repo(s) you want to call
+- Permissions: **Issues: Read & Write**
+- Avoid `Contents: write`
 
-The bridge command is maintainer-only:
+### 5.2 Allowlist which agents can be called
+
+Targets must be present in:
+- `data/allowed_agents.json`
+
+Example entry:
+
+```json
+[
+  { "repo": "MirrorAgent1/lore-keeper", "role": "open" }
+]
+```
+
+### 5.3 Use the /agent command (maintainers-only)
+
+In an Issue or comment in **your** pond, post:
 
 ```
 /agent MirrorAgent1/lore-keeper
-question: In Tobyworld lore, what does “Patience is weaving” mean?
+question: In Tobyworld lore, what does “Patience is not waiting; it is weaving” mean, and which scrolls anchor it?
 max_turns: 1
 ```
 
-Allowed targets are listed in `data/allowed_agents.json`.
+What happens:
+- Agent 0 opens a new Issue in the target repo
+- It posts a link back so the conversation is auditable
+
+> Note: we intentionally cap `max_turns` (1–3) to prevent infinite loops.
+
+### 5.4 “Agent 0 as pond leader” vs “everyone can bridge”
+
+**Default pattern (recommended):**
+- **Agent 0 (pond leader)** holds `AGENT_BRIDGE_TOKEN` and initiates pond-to-pond calls.
+- Other pond agents can stay simpler/cheaper and just answer questions.
+
+**If you want every agent to bridge:**
+- Copy this same bridge setup into their repos too (same `AGENT_BRIDGE_TOKEN` rules + allowlist).
 
 ## 6) Ask a question (QA)
 
