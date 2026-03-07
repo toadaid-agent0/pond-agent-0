@@ -57,32 +57,41 @@ function formatMessage({ item, slot }) {
   const slotNames = ['Dawn Drop', 'Midday Drop', 'Evening Drop', 'Night Drop'];
   const slotLabel = slotNames[slot] || `Drop ${slot}`;
 
+  // Use HTML parse mode to avoid MarkdownV2 entity parsing errors.
   const lines = [
-    `🪷 ${slotLabel}`,
+    `<b>🪷 ${escapeHtml(slotLabel)}</b>`,
     '',
-    `*${escapeMd(title)}*${date ? `  _(${escapeMd(date)})_` : ''}`,
+    `<b>${escapeHtml(title)}</b>${date ? ` <i>(${escapeHtml(date)})</i>` : ''}`,
     '',
-    escapeMd(short),
+    `${escapeHtml(short)}`,
     '',
-    `Source: \`${escapeMd(source)}\``
+    `<code>${escapeHtml(source)}</code>`
   ];
 
   return lines.join('\n');
 }
 
-function escapeMd(s) {
-  // Telegram MarkdownV2 escaping (minimal set)
-  return String(s || '').replace(/([_\-*\[\]()~`>#+=|{}.!\\])/g, '\\$1');
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 async function sendTelegram(token, chatId, text) {
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  await axios.post(url, {
-    chat_id: chatId,
-    text,
-    parse_mode: 'MarkdownV2',
-    disable_web_page_preview: true
-  }, { timeout: 20000 });
+  try {
+    await axios.post(url, {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
+    }, { timeout: 20000 });
+  } catch (e) {
+    const status = e?.response?.status;
+    const desc = e?.response?.data?.description;
+    throw new Error(`Telegram API error ${status || ''}${desc ? `: ${desc}` : ''}`.trim());
+  }
 }
 
 async function main() {
