@@ -73,6 +73,11 @@ This produces `data/scroll_index.json` used for better citations.
 ---
 
 ## Step 6 — Ask your agent a lore question
+**Rules of the Pond (keep it clean):**
+- 1 question per issue
+- Lore only (no price calls / no financial advice requests)
+- Be patient: free-tier APIs can be slow or rate-limited
+
 1) Go to your fork → **Issues** → **New issue**
 2) Ask a single question (examples below)
 3) Wait ~10–30 seconds for the bot reply
