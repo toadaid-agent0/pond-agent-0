@@ -404,7 +404,12 @@ function isPrivilegedAssociation(a) {
 
 function normalizeUserMessage(s, maxLen = 2000) {
   // Keep prompts bounded. Remove NULLs and hard-trim.
-  const out = String(s || '').replace(/\u0000/g, '').trim();
+  // Also normalize literal "\\n" sequences (often introduced by tooling) into real newlines.
+  const out = String(s || '')
+    .replace(/\u0000/g, '')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .trim();
   return out.length > maxLen ? out.slice(0, maxLen) + "\n…(truncated)" : out;
 }
 
