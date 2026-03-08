@@ -764,8 +764,10 @@ async function awakenScribe() {
                    "A Traveler";
 
     // Extra guard against self-trigger loops (in case workflow-level if is bypassed)
-    if (process.env.COMMENT_USER && (process.env.COMMENT_USER === 'toadaid-agent0' || process.env.COMMENT_USER === 'github-actions[bot]')) {
-      console.log('ℹ️ Ignoring self-authored comment trigger.');
+    // NOTE: Do not block the repo owner account (toadaid-agent0) from asking follow-ups.
+    // We only block GitHub Actions bot comments here.
+    if (process.env.COMMENT_USER && process.env.COMMENT_USER === 'github-actions[bot]') {
+      console.log('ℹ️ Ignoring github-actions[bot] comment trigger.');
       return;
     }
 
