@@ -286,6 +286,21 @@ function getRelevantScrolls(question) {
   return out;
 }
 
+function getTargetRepoSlug() {
+  // GitHub Actions sets GITHUB_REPOSITORY to the workflow repo and it cannot be reliably overridden.
+  // For cross-repo bridging (Agent0 replying into Agent1 threads), use TARGET_REPOSITORY when provided.
+  return String(process.env.TARGET_REPOSITORY || process.env.GITHUB_REPOSITORY || '').trim();
+}
+
+function getTargetOwnerRepo() {
+  const slug = getTargetRepoSlug();
+  const parts = slug.split('/');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error(`Invalid repo slug: ${slug}`);
+  }
+  return [parts[0], parts[1]];
+}
+
 // ==================== STATS TRACKING ====================
 async function updateStats(user, question) {
   stats.totalQuestions++;
@@ -298,7 +313,7 @@ async function updateStats(user, question) {
 
   try {
     const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-    const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+    const [owner, repo] = getTargetOwnerRepo();
 
     await octokit.repos.createOrUpdateFileContents({
       owner,
@@ -331,7 +346,7 @@ async function trackValidator(wallet, question) {
   
   try {
     const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-    const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+    const [owner, repo] = getTargetOwnerRepo();
     
     const timestamp = new Date().toISOString();
     const line = `${wallet},${timestamp},"${question.replace(/"/g, '""')}"\n`;
@@ -761,7 +776,7 @@ async function awakenScribe() {
 
     // GitHub client (used for cooldown/admin + replying)
     const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-    const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+    const [owner, repo] = getTargetOwnerRepo();
 
     // Admin commands (maintainers only)
     if (await maybeHandleAdminCommand({ octokit, owner, repo, issueNumber, userName, association, userMessage })) {
@@ -1023,7 +1038,7 @@ ${response}
     // Try to post error
     if (process.env.ISSUE_NUMBER || process.env.NEW_ISSUE_NUMBER) {
       const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-      const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+      const [owner, repo] = getTargetOwnerRepo();
       const issueNum = process.env.ISSUE_NUMBER || process.env.NEW_ISSUE_NUMBER;
       
       await octokit.issues.createComment({

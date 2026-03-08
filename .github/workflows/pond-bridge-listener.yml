@@ -49,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.AGENT0_PAT }}
 
           # Target issue context (from MirrorAgent1/lore-keeper dispatch)
-          GITHUB_REPOSITORY: ${{ github.event.client_payload.source_repo }}
+          TARGET_REPOSITORY: ${{ github.event.client_payload.source_repo }}
           ISSUE_NUMBER: ${{ github.event.client_payload.issue_number }}
 
           NEW_ISSUE_NUMBER: ${{ github.event.client_payload.issue_number }}
