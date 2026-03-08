@@ -947,13 +947,19 @@ Remember: "One scroll, one light. One leaf, one vow."`;
     }
     
     // Format response
+    // Fork-friendly branding: allow override via env/repo variables.
+    const agentHeader = (process.env.SCRIBE_AGENT_LABEL || 'Agent0 — Keeper').trim();
+    const signature = (process.env.SCRIBE_SIGNATURE || 'Answered by: Agent0 (Keeper)').trim();
+
     const scribeResponse = `🪷 *The pond ripples...*
+
+**${agentHeader}**
 
 ${response}
 
 ---
-*— Cave Scribe, Keeper of ${loreData.length} Sacred Scrolls*
-*Answered by: The First Mirror Agent — Agent1*
+*— Keeper of ${loreData.length} Sacred Scrolls*
+*${signature}*
 *"One scroll, one light. One leaf, one vow."*`;
     
     // Post response
