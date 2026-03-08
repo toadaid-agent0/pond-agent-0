@@ -1,0 +1,78 @@
+name: Pond Bridge Listener (Agent0)
+
+on:
+  repository_dispatch:
+    types: [pond_issue_opened, pond_issue_commented]
+
+concurrency:
+  group: pond-bridge-${{ github.event.client_payload.source_repo }}-${{ github.event.client_payload.issue_number }}
+  cancel-in-progress: true
+
+jobs:
+  agent0-reply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Agent0 Pond
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Smoke test (syntax)
+        run: node -c .github/scripts/awaken-scribe.js
+
+      - name: Agent0 joins the thread
+        env:
+          # Model keys
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+          # IMPORTANT: must have permission to comment on the source repo's issues.
+          # This is intentionally NOT github.token because github.token is scoped to this repo.
+          GITHUB_TOKEN: ${{ secrets.AGENT0_PAT }}
+
+          # Target issue context (from MirrorAgent1/lore-keeper dispatch)
+          GITHUB_REPOSITORY: ${{ github.event.client_payload.source_repo }}
+          ISSUE_NUMBER: ${{ github.event.client_payload.issue_number }}
+
+          NEW_ISSUE_NUMBER: ${{ github.event.client_payload.issue_number }}
+          NEW_ISSUE_TITLE: ${{ github.event.client_payload.issue_title }}
+          NEW_ISSUE_BODY: ${{ github.event.client_payload.issue_body }}
+
+          COMMENT_BODY: ${{ github.event.client_payload.comment_body }}
+          COMMENT_USER: ${{ github.event.client_payload.comment_user }}
+
+          # Fork-friendly signature for Agent0
+          SCRIBE_AGENT_LABEL: Agent0 — Keeper
+          SCRIBE_SIGNATURE: Answered by: Agent0 (Keeper)
+
+          # Optional: prevents accidental dual-posting if you reuse control issues
+          POND_CONTROL_ISSUE: ""
+
+          # Manual message (unused here)
+          MANUAL_MESSAGE: ""
+        run: |
+          if [ -z "$GITHUB_TOKEN" ]; then
+            echo "Missing required secret AGENT0_PAT (token must be able to comment on source repo)."
+            exit 1
+          fi
+
+          echo "Replying into $GITHUB_REPOSITORY issue #$ISSUE_NUMBER (event: ${{ github.event.action }}/${{ github.event_name }})"
+          node .github/scripts/awaken-scribe.js
