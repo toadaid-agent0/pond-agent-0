@@ -23,10 +23,11 @@ concurrency:
 
 jobs:
   scribe-reflection:
-    # Prevent self-trigger loops: ignore comments authored by the agent/bot itself.
+    # Prevent self-trigger loops: ignore comments authored by GitHub Actions bot.
+    # Allow the repo owner (toadaid-agent0) to ask follow-ups in the same issue.
     if: |
       github.event_name != 'issue_comment' ||
-      (github.event.comment.user.login != 'toadaid-agent0' && github.event.comment.user.login != 'github-actions[bot]')
+      (github.event.comment.user.login != 'github-actions[bot]')
     runs-on: ubuntu-latest
     permissions:
       issues: write
