@@ -16,8 +16,10 @@ on:
         default: 'The pond stirs...'
 
 concurrency:
-  group: cave-scribe-${{ github.event.issue.number || github.event.inputs.issue_number || 'manual' }}
-  cancel-in-progress: true
+  # Use a per-event group so bot follow-up comments don't cancel the original user-triggered run.
+  # For issue_comment events, key by comment id; for issues, key by issue number.
+  group: cave-scribe-${{ github.event_name }}-${{ github.event.comment.id || github.event.issue.number || github.event.inputs.issue_number || 'manual' }}
+  cancel-in-progress: false
 
 jobs:
   scribe-reflection:
@@ -63,7 +65,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           AGENT_BRIDGE_TOKEN: ${{ secrets.AGENT_BRIDGE_TOKEN }}
-          POND_CONTROL_ISSUE: "19"
+          POND_CONTROL_ISSUE: "23"
 
           # Use the built-in GitHub Actions token (scoped to this repo + workflow permissions)
           GITHUB_TOKEN: ${{ github.token }}
@@ -83,3 +85,103 @@ jobs:
           NEW_ISSUE_USER: ${{ github.event.issue.user.login }}
           NEW_ISSUE_ASSOCIATION: ${{ github.event.issue.author_association }}
         run: node .github/scripts/awaken-scribe.js
+
+  summon-pond-agents:
+    # Dispatch bridge to other pond agents based on data/pond_agents.json.
+    # - issues.opened: dispatch to agents where auto_join_on_new_issue=true
+    # - issue_comment.created: dispatch to agents whose mention is present (plus "keeper" alias for agent0)
+    # - ignore bot/self comments to prevent loops
+    if: |
+      github.event_name == 'issues' || (
+        github.event_name == 'issue_comment' &&
+        github.event.comment.user.login != 'github-actions[bot]' &&
+        github.event.comment.user.login != 'MirrorAgent1'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dispatch to mapped pond agents (repository_dispatch)
+        env:
+          # Preferred: one token that can dispatch to all target repos.
+          # Back-compat: fall back to AGENT0_DISPATCH_TOKEN.
+          POND_DISPATCH_TOKEN: ${{ secrets.POND_DISPATCH_TOKEN || secrets.AGENT0_DISPATCH_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+        run: |
+          if [ -z "$POND_DISPATCH_TOKEN" ]; then
+            echo "No dispatch token set. Set POND_DISPATCH_TOKEN (preferred) or AGENT0_DISPATCH_TOKEN (legacy)."
+            exit 0
+          fi
+
+          CFG="data/pond_agents.json"
+          if [ ! -f "$CFG" ]; then
+            echo "No $CFG found; skipping pond agent dispatch."
+            exit 0
+          fi
+
+          EVENT_TYPE="pond_issue_opened"
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then EVENT_TYPE="pond_issue_commented"; fi
+
+          # Decide which agents to dispatch
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            agents=$(jq -c '.agents[] | select(.enabled==true and .auto_join_on_new_issue==true) | {id,mention,repo}' "$CFG")
+          else
+            body="${COMMENT_BODY:-}"
+            # dispatch when explicit mention exists; allow "keeper" as an alias for agent0
+            agents=$(jq -c --arg body "$body" '.agents[]
+              | select(.enabled==true)
+              | select((.mention != null and (.mention|length)>0 and ($body|contains(.mention))) or (.id=="agent0" and ($body|ascii_downcase|contains("keeper"))))
+              | {id,mention,repo}' "$CFG")
+          fi
+
+          if [ -z "$agents" ]; then
+            echo "No mapped pond agents matched for this event."
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg source_repo "${{ github.repository }}" \
+            --arg issue_number "$ISSUE_NUMBER" \
+            --arg issue_url "$ISSUE_URL" \
+            --arg issue_title "$ISSUE_TITLE" \
+            --arg issue_body "${ISSUE_BODY:-}" \
+            --arg comment_body "${COMMENT_BODY:-}" \
+            --arg comment_user "${COMMENT_USER:-}" \
+            '{
+              source_repo: $source_repo,
+              issue_number: ($issue_number|tonumber),
+              issue_url: $issue_url,
+              issue_title: $issue_title,
+              issue_body: $issue_body,
+              comment_body: $comment_body,
+              comment_user: $comment_user
+            }')
+
+          echo "$agents" | while read -r a; do
+            id=$(echo "$a" | jq -r '.id')
+            repo=$(echo "$a" | jq -r '.repo')
+            echo "Dispatching $EVENT_TYPE to $repo (id=$id) for issue #$ISSUE_NUMBER"
+
+            resp=$(mktemp)
+            code=$(curl -sS -o "$resp" -w "%{http_code}" -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $POND_DISPATCH_TOKEN" \
+              "https://api.github.com/repos/$repo/dispatches" \
+              -d "{\"event_type\":\"$EVENT_TYPE\",\"client_payload\":$payload}")
+
+            echo "dispatch($id) http_code=$code"
+            if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              echo "Dispatch failed for $repo. Response:"
+              cat "$resp" || true
+              exit 1
+            fi
+            rm -f "$resp"
+          done
