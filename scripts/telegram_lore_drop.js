@@ -39,11 +39,58 @@ function fnv1a32(str) {
   return h >>> 0;
 }
 
+function mulberry32(seed) {
+  // Tiny seeded PRNG (deterministic)
+  let a = seed >>> 0;
+  return function rand() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function stableShuffle(items, seedStr) {
+  const rand = mulberry32(fnv1a32(seedStr));
+  const a = items.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function dedupeLoreItems(items) {
+  const seen = new Set();
+  const out = [];
+  for (const it of items) {
+    const key = String(it?.id || it?.url || it?.title || it?.original || JSON.stringify(it)).trim();
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(it);
+  }
+  return out;
+}
+
 function pickItem(items, slot) {
+  // "Random" but deterministic per-day: prevents duplicates between the 4 daily slots
+  // without requiring repo writes/state.
   const now = new Date();
-  const key = `${dayKeyUTC(now)}::slot=${slot}`;
-  const idx = fnv1a32(key) % items.length;
-  return { item: items[idx], key, idx };
+  const daySeed = dayKeyUTC(now);
+
+  // For very large sources (e.g. scroll_index), avoid shuffling the full array.
+  // We fall back to a deterministic hash pick (may allow same-item collision across slots).
+  if (items.length > 5000) {
+    const key = `${daySeed}::slot=${slot}`;
+    const idx = fnv1a32(key) % items.length;
+    return { item: items[idx], key, idx };
+  }
+
+  const shuffled = stableShuffle(items, `day=${daySeed}`);
+  const idx = ((slot % shuffled.length) + shuffled.length) % shuffled.length;
+  return { item: shuffled[idx], key: `day=${daySeed}::slot=${slot}`, idx };
 }
 
 function formatMessage({ item, slot }) {
@@ -161,6 +208,10 @@ async function main() {
   }
 
   if (!Array.isArray(items) || items.length === 0) fail('Lore source is empty or invalid');
+
+  // Extra guard against accidental duplicates in the underlying dataset.
+  items = dedupeLoreItems(items);
+  if (items.length === 0) fail('Lore source is empty after dedupe');
 
   const { item } = pickItem(items, slot);
   const text = formatMessage({ item, slot });
